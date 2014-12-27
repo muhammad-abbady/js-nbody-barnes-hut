@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="text/javascript" src="d3.js" charset="utf-8"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class=centered>
+    <div id='main'>
+        <h1>
+            Simple N Body Simulation using Barnes-Hut method
+        </h1>
+        <h3>O(n log n) complexity</h3>
+    </div>
+    <div id="viz"></div>
+    <div id=footer>Written by Muhammad Abbady for this <a href="http://masblogcentral.wordpress.com/">this</a> blog post.</div>
+    <script type="text/javascript">
+    //Constants
+    var width = 900;
+    var height = 500;
+    var dt = 10000;         //In seconds.
+    var G = 6.67384e-11;    //Gravitational constant.
+    var e = 1;              //Epsilon (to prevent infinite forces due to very small distances).
+    var theta = 0.5;        //Used to decide whether the center-of-mass particle should be used or not.
+
+    //Particles
+    var bodies = [];
+
+    //Generate random particles
+    var maximumMass = 3;
+    var numberOfParticles = 1000;
+    var maximumRadius = 150;
+    var minimumRadius = 20;
+
+    //Set the first particle's mass to be the heaviest, and make it centered (like the center of a galaxy).
+    bodies.push({});
+    bodies[0].m = maximumMass * 1000;
+    bodies[0].x = width / 2;
+    bodies[0].y = height / 2;
+    bodies[0].vx = 0;
+    bodies[0].vy = 0;
+    bodies[0].ax = 0;
+    bodies[0].ay = 0;
+
+    //The rest of the particles will have small masses, and they should rotate around the center.
+    for (var i = 1; i < numberOfParticles; i++) {
+        var body = {};
+
+        //Initialize the position of the particle (I used a random radius and angle to shape the position into a circle).
+        var radius = minimumRadius + Math.random() * (maximumRadius - minimumRadius);
+        var angle = Math.random() * Math.PI * 2;
+        body.x = width / 2 + radius * Math.cos(angle);
+        body.y = height / 2 + radius * Math.sin(angle);
+
+        //Calculate the distance between the particle and the center particle.
+        var dx = body.x - bodies[0].x;
+        var dy = body.y - bodies[0].y;
+        var r = Math.sqrt(dx*dx + dy*dy);
+
+        //Calculate the orbiting velocity (Check http://en.wikipedia.org/wiki/Orbital_speed).
+        var ve = Math.sqrt(G * bodies[0].m / r);
+
+        //Set the speed of the particle
+        body.vx = ve * dy / r;
+        body.vy = ve * -dx / r;
+
+        //Set the mass of the particle.
+        body.m = Math.random() * maximumMass;
+        
+        //Set the acceleration with zero (will be used later).
+        body.ax = 0;
+        body.ay = 0;
+        
+        //Add the particle to the array.
+        bodies.push(body);
+    };
+
+    //Set the width for the main div
+    d3.select("body").style({'width' : width + 'px'});
+
+    //Create the main SVG element
+    var mainSvg = d3.select("#viz")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    //Create a group for rectangles (to show behind the bodies)
+    var rectGroup = mainSvg.append('g');    
+
+    //Create and bind circles for each particle.
+    mainSvg.selectAll('circle')
+            .data(bodies)
+            .enter()
+            .append('circle')
+            .attr('cx', function(d) { return d.x })
+            .attr('cy', function(d) { return d.y })
+            .attr('r', function(d) { return Math.min(d.m, maximumMass) });
+
+    //The update loop
+
+    (function update() {
+        //Monitor the iteration time
+        var timeStarted = performance.now();
+
+        //Construct the qtree.
+        var qroot = {};
+        var bounds = {
+            minX : 0,
+            maxX : width,
+            minY : 0,
+            maxY : width,
+        };
+        constructQTree(qroot, bodies, bounds);
+
+        //Create a recursive function that calculates the acceleration for each body using the Barnes-Hut method.
+        //This page explains things (http://www.cs.princeton.edu/courses/archive/fall03/cs126/assignments/barnes-hut.html).
+        function calculateAcceleration(body, node) {
+            if (node === undefined)
+                return;
+            else if (node.body == body)
+                return;
+
+            var dx = node.body.x - body.x;
+            var dy = node.body.y - body.y;
+            var r = Math.sqrt(dx*dx + dy*dy);
+            var boundWidth = node.bounds.maxX - node.bounds.minX;
+
+            if (boundWidth/r <= theta ||
+                (node.q1 === undefined && node.q2 === undefined &&
+                 node.q3 === undefined && node.q4 === undefined)) {
+                var dx = body.x - node.body.x;
+                var dy = body.y - node.body.y;
+                var r = Math.max(Math.sqrt(dx*dx + dy*dy), e);
+                var f = G * node.body.m / (r*r);
+
+                //The negative sign to attract particles to each other rather than pulling them apart.
+                body.ax -= f * (dx/r);
+                body.ay -= f * (dy/r);
+            } else {
+                if (node.q1 !== undefined)
+                    calculateAcceleration(body, node.q1);
+
+                if (node.q2 !== undefined)
+                    calculateAcceleration(body, node.q2);
+
+                if (node.q3 !== undefined)
+                    calculateAcceleration(body, node.q3);
+
+                if (node.q4 !== undefined)
+                    calculateAcceleration(body, node.q4);
+            }
+        }
+
+        //Calculate acceleration using the recursive method.
+        for (var i = 1; i < bodies.length; i++) {
+            bodies[i].ax = 0;
+            bodies[i].ay = 0;
+            calculateAcceleration(bodies[i], qroot);
+        }
+
+        //Update velocity and position
+        for (var i = 1; i < bodies.length; i++) {
+            bodies[i].vx += bodies[i].ax * dt;
+            bodies[i].vy += bodies[i].ay * dt;
+            bodies[i].x += bodies[i].vx * dt;
+            bodies[i].y += bodies[i].vy * dt;
+        }
+
+        //Update circles.
+        mainSvg.selectAll('circle')
+            .data(bodies)
+            .attr('cx', function(d) { return d.x })
+            .attr('cy', function(d) { return d.y });
+        
+        //Draw the quad tree.
+        //drawQuads(qroot);
+
+        //Log the time spent on this iteration
+        console.log((performance.now() - timeStarted) + " milliseconds");
+
+        //Recall update with a delay.
+        setTimeout(update, 0);
+    })();
+    
+    //This method constructs the quad tree given the root object, the initial bouding box (the whole canvas), and the bodies.
+    function constructQTree(node, particles, bounds) {
+        node.bounds = bounds;
+        if (particles.length == 1) {
+            node.body = particles[0];
+            return;
+        } else {
+            var centerOfMassX = 0;
+            var centerOfMassY = 0;
+            var totalMass = 0;
+
+            for (var i = 0; i < particles.length; i++) {
+                centerOfMassX += particles[i].x * particles[i].m;
+                centerOfMassY += particles[i].y * particles[i].m;
+                totalMass += particles[i].m
+            };
+
+            centerOfMassX /= totalMass;
+            centerOfMassY /= totalMass;
+
+            node.body = {
+                x : centerOfMassX,
+                y : centerOfMassY,
+                m : totalMass
+            }
+        }
+
+        var q1List = [];
+        var q2List = [];
+        var q3List = [];
+        var q4List = [];
+
+        var centerX = (bounds.minX + bounds.maxX) / 2;
+        var centerY = (bounds.minY + bounds.maxY) / 2;
+
+        for (var i = 0; i < particles.length; i++) {
+            if (particles[i].x < centerX && particles[i].y < centerY)
+                q1List.push(particles[i]);
+            else if (particles[i].x >= centerX && particles[i].y < centerY)
+                q2List.push(particles[i]);
+            else if (particles[i].x >= centerX && particles[i].y >= centerY)
+                q3List.push(particles[i]);
+            else if (particles[i].x < centerX && particles[i].y >= centerY)
+                q4List.push(particles[i]);
+        };
+
+        if (q1List.length > 0) {
+            node.q1 = {};
+            constructQTree(node.q1, q1List, {
+                minX : bounds.minX,
+                maxX : centerX,
+                minY : bounds.minY,
+                maxY : centerY
+            });
+        }
+
+        if (q2List.length > 0) {
+            node.q2 = {};
+            constructQTree(node.q2, q2List, {
+                minX : centerX,
+                maxX : bounds.maxX,
+                minY : bounds.minY,
+                maxY : centerY
+            });
+        }
+
+        if (q3List.length > 0) {
+            node.q3 = {};
+            constructQTree(node.q3, q3List, {
+                minX : centerX,
+                maxX : bounds.maxX,
+                minY : centerY,
+                maxY : bounds.maxY
+            });
+        }
+
+        if (q4List.length > 0) {
+            node.q4 = {};
+            constructQTree(node.q4, q4List, {
+                minX : bounds.minX,
+                maxX : centerX,
+                minY : centerY,
+                maxY : bounds.maxY
+            });
+        }
+    }
+
+    //Recursively draw rectangles for all nodes.
+    function drawQuads(qroot) {
+        var quads = [];
+        (function traverse(node) {
+            if (node !== undefined) {
+                quads.push(node.bounds);
+                traverse(node.q1);
+                traverse(node.q2);
+                traverse(node.q3);
+                traverse(node.q4);
+            }
+        })(qroot);
+
+        var rects = rectGroup.selectAll('rect').data(quads);
+        rects.enter().append('rect');
+        rects
+            .attr('x', function(d) { return d.minX; })
+            .attr('y', function(d) { return d.minY; })
+            .attr('width', function(d) { return d.maxX - d.minX; })
+            .attr('height', function(d) { return d.maxY - d.minY; })
+            .style({'fill-opacity' : '0', stroke : '#bbb'});
+        rects.exit().remove();
+    }
+    </script>
+</body>
+</html>
