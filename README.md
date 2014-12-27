@@ -7,3 +7,5 @@ Todo:
 - Use Bower to manage dependencies.
 - Use WebGL for faster rendering.
 - Optimize the tree creation.
+
+PS: This was tested on Webkit-based browsers only (Chrome and Safari).
