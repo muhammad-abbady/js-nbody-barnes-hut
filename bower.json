@@ -1,0 +1,25 @@
+{
+  "name": "NBody-D3 Barnes-Hut",
+  "version": "0.0.1",
+  "homepage": "https://github.com/muhammad-abbady/js-nbody-barnes-hut",
+  "authors": [
+    "muhammad-abbady <Muhammad Abbady>"
+  ],
+  "description": "A Javascript-based, Barnes-Hut N-Body simulation.",
+  "main": "nbody.html",
+  "moduleType": [
+    "globals"
+  ],
+  "dependencies": {
+    "d3": "~3.5.2"
+  },
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
