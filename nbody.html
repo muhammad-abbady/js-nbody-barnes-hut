@@ -287,8 +287,7 @@
             .attr('x', function(d) { return d.minX; })
             .attr('y', function(d) { return d.minY; })
             .attr('width', function(d) { return d.maxX - d.minX; })
-            .attr('height', function(d) { return d.maxY - d.minY; })
-            .style({'fill-opacity' : '0', stroke : '#bbb'});
+            .attr('height', function(d) { return d.maxY - d.minY; });
         rects.exit().remove();
     }
     </script>
