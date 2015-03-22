@@ -102,12 +102,20 @@
         var timeStarted = performance.now();
 
         //Construct the qtree.
+        function cmp(arr, prop, fn) {
+            var res = prop(arr[0]);
+            for (var i = 0; i < arr.length; i++) {
+                res = fn(res, prop(arr[i]));
+            };
+
+            return res;
+        }
         var qroot = {};
         var bounds = {
-            minX : 0,
-            maxX : width,
-            minY : 0,
-            maxY : width,
+            minX : cmp(bodies, function(d) { return d.x; }, Math.min),
+            maxX : cmp(bodies, function(d) { return d.x; }, Math.max),
+            minY : cmp(bodies, function(d) { return d.y; }, Math.min),
+            maxY : cmp(bodies, function(d) { return d.y; }, Math.max),
         };
         constructQTree(qroot, bodies, bounds);
 
